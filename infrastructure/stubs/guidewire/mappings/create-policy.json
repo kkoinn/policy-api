@@ -1,0 +1,20 @@
+{
+    "request": {
+        "method": "POST",
+        "url": "/api/v1/policies"
+    },
+    "response": {
+        "status": 201,
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "jsonBody": {
+            "policyNumber": "100000001",
+            "customerNumber": "12345",
+            "status": "Active",
+            "startDate": "2026-01-01T00:00:00",
+            "endDate": "2027-01-01T00:00:00",
+            "premium": 1200.00
+        }
+    }
+}

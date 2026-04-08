@@ -1,0 +1,3 @@
+# GitVersion 6.7 Configuration
+workflow: GitHubFlow/v1
+mode: ContinuousDeployment

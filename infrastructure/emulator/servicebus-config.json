@@ -1,0 +1,28 @@
+{
+    "UserConfig": {
+        "Namespaces": [
+            {
+                "Name": "sbemulatorns",
+                "Topics": [
+                    {
+                        "Name": "policy-events",
+                        "Properties": {
+                            "DefaultMessageTimeToLive": "PT1H"
+                        },
+                        "Subscriptions": [
+                            {
+                                "Name": "policy-events-sub",
+                                "Properties": {
+                                    "MaxDeliveryCount": 10
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "Logging": {
+            "Type": "Console"
+        }
+    }
+}

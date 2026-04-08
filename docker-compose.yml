@@ -1,0 +1,42 @@
+services:
+  guidewire-stub:
+    image: wiremock/wiremock:latest
+    container_name: guidewire-stub
+    ports:
+      - "9090:8080"
+    volumes:
+      - ./infrastructure/stubs/guidewire/mappings:/home/wiremock/mappings
+
+  servicebus-emulator:
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:latest
+    container_name: servicebus-emulator
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    ports:
+      - "5672:5672"
+    environment:
+      SQL_SERVER: sqlserver
+      MSSQL_SA_PASSWORD: "YourStrong!Passw0rd"
+      ACCEPT_EULA: "Y"
+    volumes:
+      - ./infrastructure/emulator/servicebus-config.json:/ServiceBus_Emulator/ConfigFiles/Config.json
+    healthcheck:
+      test: [ "CMD-SHELL", "/ServiceBus_Emulator/ServiceBus.Emulator health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: servicebus-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "YourStrong!Passw0rd"
+    healthcheck:
+      test: [ "CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"YourStrong!Passw0rd\" -C -Q \"SELECT 1\" || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
