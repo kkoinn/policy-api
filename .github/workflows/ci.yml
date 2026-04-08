@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: csharp
+          queries: security-and-quality
+
+      - name: Build for CodeQL
+        run: dotnet build PolicyApi.slnx --configuration Release
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:csharp
+
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Install GitVersion
+        uses: gittools/actions/gitversion/setup@v3
+        with:
+          versionSpec: '6.x'
+
+      - name: Determine Version
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v3
+
+      - name: Restore
+        run: dotnet restore PolicyApi.slnx
+
+      - name: Build
+        run: dotnet build PolicyApi.slnx --configuration Release --no-restore /p:Version=${{ steps.gitversion.outputs.semVer }}
+
+      - name: Unit Tests
+        run: dotnet test tests/PolicyApi.UnitTests/PolicyApi.UnitTests.csproj --configuration Release --no-build --logger "trx;LogFileName=unit-test-results.xml" --results-directory ./test-results
+
+      - name: Integration Tests
+        run: dotnet test tests/PolicyApi.IntegrationTests/PolicyApi.IntegrationTests.csproj --configuration Release --no-build --logger "trx;LogFileName=integration-test-results.xml" --results-directory ./test-results
+
+      - name: Publish Test Results
+        uses: dorny/test-reporter@v1.9.0
+        if: always()
+        with:
+          name:          Test Results
+          path:          ./test-results/*.xml
+          reporter:      dotnet-trx
+          fail-on-error: true
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name:           test-results
+          path:           ./test-results
+          retention-days: 7
+

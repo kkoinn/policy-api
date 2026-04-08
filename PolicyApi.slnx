@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="src/PolicyApi/PolicyApi.csproj" />
+  <Project Path="tests/PolicyApi.UnitTests/PolicyApi.UnitTests.csproj" />
+  <Project Path="tests/PolicyApi.IntegrationTests/PolicyApi.IntegrationTests.csproj" />
+</Solution>
