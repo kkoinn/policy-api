@@ -1,0 +1,93 @@
+name: AI - Coverage Analysis
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+  contents: read
+  actions: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.event == 'pull_request' }}
+
+    steps:
+      - name: Download test results artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          ARTIFACT_ID=$(gh api repos/${{ github.repository }}/actions/runs/$RUN_ID/artifacts \
+            --jq '.artifacts[] | select(.name=="test-results") | .id')
+
+          if [ -z "$ARTIFACT_ID" ]; then
+            echo "No test-results artifact found"
+            exit 0
+          fi
+
+          gh api repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip > test-results.zip
+          unzip -o test-results.zip -d test-results/
+
+      - name: Extract coverage report
+        shell: bash
+        run: |
+          find ./test-results -name "*.cobertura.xml" -exec cat {} \; 2>/dev/null | head -c 15000 > coverage.xml
+          if [ ! -s coverage.xml ]; then
+            echo "No coverage XML found" > coverage.xml
+          fi
+
+      - name: Analyze with Azure OpenAI
+        shell: pwsh
+        env:
+          ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          KEY: ${{ secrets.AZURE_OPENAI_KEY }}
+        run: |
+          $content = Get-Content coverage.xml -Raw
+          $prompt = @"
+You are a .NET test architect. Analyze this Cobertura coverage report and identify:
+- Classes and methods with no test coverage
+- Areas with weak coverage (below 70%)
+- Missing test scenarios based on the code structure
+- Highest risk untested areas
+
+For each gap, suggest a specific xUnit test name and what it should assert.
+
+Coverage report:
+$content
+"@
+          $body = @{
+            messages = @(@{ role = "user"; content = $prompt })
+            max_tokens = 1500
+            temperature = 0.3
+          } | ConvertTo-Json -Depth 10
+
+          $response = Invoke-RestMethod "$env:ENDPOINT/openai/deployments/gpt-4/chat/completions?api-version=2024-02-15-preview" `
+            -Method POST `
+            -Headers @{ "api-key" = $env:KEY } `
+            -Body $body `
+            -ContentType "application/json"
+
+          $response.choices[0].message.content | Out-File -FilePath analysis.md -Encoding utf8
+
+      - name: Comment on PR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }} \
+            --jq '.pull_requests[0].number')
+
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+            echo "No associated PR found, skipping comment."
+            exit 0
+          fi
+
+          BODY=$(cat analysis.md)
+          gh pr comment "$PR_NUMBER" --repo ${{ github.repository }} --body "## 🧬 AI Coverage Analysis
+
+$BODY"
